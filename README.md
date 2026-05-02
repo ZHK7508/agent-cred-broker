@@ -27,17 +27,23 @@ Agent → POST /credentials {principal, agent_id, action, resource, ttl_seconds,
 ## Quickstart
 
 ```bash
-# Install
-pip install agent-cred-broker
+git clone <repo>
+cd agent-cred-broker
+uv sync
+
+# Generate signing keypair (first-time setup)
+openssl genpkey -algorithm Ed25519 -out keys/signing.pem
+openssl pkey -in keys/signing.pem -pubout -out keys/signing.pub
+chmod 600 keys/signing.pem
 
 # Run 5 demo scenarios (no database required)
-broker-cli demo
+uv run broker-cli demo
 
 # Verify audit chain integrity
-broker-cli verify-chain
+uv run broker-cli verify-chain
 
 # Decode a token
-broker-cli decode-token <jwt>
+uv run broker-cli decode-token <jwt>
 ```
 
 ## API
@@ -65,15 +71,6 @@ curl -s http://localhost:8000/health
 ## Development
 
 ```bash
-git clone <repo>
-cd agent-cred-broker
-uv sync
-
-# Generate signing keypair (first-time setup)
-openssl genpkey -algorithm Ed25519 -out keys/signing.pem
-openssl pkey -in keys/signing.pem -pubout -out keys/signing.pub
-chmod 600 keys/signing.pem
-
 # Demo — no database needed
 uv run broker-cli demo
 
@@ -92,16 +89,19 @@ uv run pytest tests/ -v
 Agents are registered in `src/core/policy.py`:
 
 ```python
-AGENT_REGISTRY = {
-    "data-pipeline": AgentPolicy(
-        owner="alice",
-        allowed_scopes=["s3:GetObject", "s3:PutObject"],
-        max_ttl_seconds=3600,
-    ),
+AGENT_REGISTRY: dict[str, dict] = {
+    "data-pipeline": {
+        "owners": {"alice@example.com"},
+        "allowed_scopes": [
+            ("s3:GetObject", "arn:aws:s3:::my-bucket/*"),
+            ("s3:PutObject", "arn:aws:s3:::my-bucket/output/*"),
+        ],
+        "max_ttl_seconds": 1800,
+    },
 }
 ```
 
-Scope matching uses `fnmatch` — `s3:*` matches all S3 actions.
+`owners` is a set of principals allowed to request credentials for this agent. `allowed_scopes` is a list of `(action, resource)` pairs where the resource supports `fnmatch` glob patterns — `arn:aws:s3:::my-bucket/*` matches any object in the bucket.
 
 ## Threat model
 
